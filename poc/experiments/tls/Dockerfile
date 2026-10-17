@@ -1,0 +1,8 @@
+FROM ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl openjdk-25-jdk-headless openssl && curl -fsSLo /tmp/openvox-release.deb https://apt.voxpupuli.org/openvox9-release-ubuntu26.04.deb && dpkg -i /tmp/openvox-release.deb && apt-get update && apt-get install -y --no-install-recommends openvox-agent=9.1.0-1+ubuntu26.04 openvox-server=9.1.0-1+ubuntu26.04 && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSLo /tmp/jdk28.tar.gz https://download.java.net/java/early_access/jdk28/20/GPL/openjdk-28-ea+20_linux-x64_bin.tar.gz && curl -fsSLo /tmp/jdk28.sha256 https://download.java.net/java/early_access/jdk28/20/GPL/openjdk-28-ea+20_linux-x64_bin.tar.gz.sha256 && printf '%s  /tmp/jdk28.tar.gz\n' "$(cat /tmp/jdk28.sha256)" | sha256sum -c - && mkdir /opt/jdk28 && tar -xzf /tmp/jdk28.tar.gz --strip-components=1 -C /opt/jdk28 && rm /tmp/jdk28.tar.gz
+WORKDIR /test
+RUN mkdir /test/bc && cp /opt/puppetlabs/server/data/puppetserver/vendored-jruby-gems/gems/jruby-openssl-0.16.3-java/lib/org/bouncycastle/*/1.86/*.jar /test/bc/ && chmod 644 /test/bc/*.jar
+RUN rm /test/bc/bctls-jdk18on-1.86.jar && curl -fsSLo /test/bc/bctls-jdk18on-1.86.2.jar https://repo.maven.apache.org/maven2/org/bouncycastle/bctls-jdk18on/1.86.2/bctls-jdk18on-1.86.2.jar && printf '8ce8d5fb1b5d323a73df1fdba920b2f97c12d047986028fe65bf64d3997e50f2  /test/bc/bctls-jdk18on-1.86.2.jar\n' | sha256sum -c -
+COPY JettyTest.java EngineProbe.java client.rb generate.sh rogue.sh crls.sh run.sh /test/

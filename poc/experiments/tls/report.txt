@@ -1,0 +1,104 @@
+OpenVox Jetty ML-DSA and revocation: bctls 1.86.2 confirmation
+Date: 17 October 2026 UTC
+
+RESULT: PASS, without the multi-release-jar workaround.
+
+The corrected Bouncy Castle TLS jar resolved the SSLEngine linkage failure.
+All 16 Jetty connection and revocation checks passed.
+
+Exact environment
+- Ubuntu 26.04 amd64.
+- OpenVox agent and server: 9.1.0-1+ubuntu26.04.
+- OpenJDK: 25.0.4.1+1-1-26.04.4-Ubuntu.
+- Jetty: 12.1.12, from the installed OpenVox server jar.
+- OpenVox ssl-utils: 3.7.1.
+- bctls-jdk18on: 1.86.2, downloaded from Maven Central and SHA-256 checked.
+- bcprov-jdk18on, bcpkix-jdk18on, bcutil-jdk18on: 1.86.
+- Agent Ruby: 4.0.7, revision 229531a6cf.
+- Ruby OpenSSL extension: 4.0.2; native OpenSSL: 3.5.9.
+
+bctls-jdk18on-1.86.2.jar SHA-256:
+8ce8d5fb1b5d323a73df1fdba920b2f97c12d047986028fe65bf64d3997e50f2
+
+What changed from the previous Jetty test
+Only the TLS jar was replaced, from 1.86 to 1.86.2, and the diagnostic option
+-Djdk.util.jar.enableMultiRelease=false was removed. Other BC jars stayed at 1.86.
+The prior explicit BCJSSE/BC provider order, PKIX key/trust manager settings, and
+ML-DSA signature lists were retained. They remain required integration settings.
+No trust, hostname or revocation checks were disabled.
+
+Confirmed runtime behavior
+The log records MULTI_RELEASE_SETTING default and the loaded 1.86.2 TLS jar.
+The dependency-only engine probe loaded the versioned Java-9 SSLEngineUtil class
+and successfully created ProvSSLEngine_9. The original linkage error is absent.
+
+Real packaged application path
+The test invoked OpenVox's packaged
+puppetlabs.trapperkeeper.services.webserver.jetty-core/ssl-context-server-factory.
+It used the returned InternalSslContextFactory in a real Jetty HTTPS listener.
+client-auth was need; protocols were restricted to TLS1.3; ssl-crl-path pointed
+to a bundle containing root and subordinate CRLs. Jetty confirmed CLIENT_AUTH
+true and REVOCATION true. Ruby verified the server chain and hostname.
+
+Both RSA and complete ML-DSA-44 hierarchies were tested. Every key and certificate
+signature in the ML-DSA hierarchy used ML-DSA-44. Root and subordinate CRLs used
+ML-DSA-44 signatures. CA constraints, leaf key usages, EKUs and SANs were set.
+OpenSSL verified the fixtures and checked revoked/unrevoked clients offline.
+
+After the initial requests, the test replaced the live CRL file and invoked the
+packaged InternalSslContextFactory.reload() method. It made fresh connections
+to the same running server. The revoked client was rejected. The other valid
+client still received HTTP 200 and pong. Java's trace explicitly reports a
+CertPathValidatorException for certificate revocation.
+
+Final checks: 16/16 passed
+For each of RSA and ML-DSA-44:
+1. First valid client before revocation: accepted, HTTP response received.
+2. Second valid client before revocation: accepted, HTTP response received.
+3. Missing client certificate: rejected.
+4. Untrusted server issuer: rejected.
+5. Untrusted client issuer: rejected.
+6. Wrong server hostname: rejected.
+7. First client after CRL reload: rejected because the certificate was revoked.
+8. Second client after CRL reload: accepted, HTTP response received.
+
+Successful requests used TLS1.3 / TLS_AES_256_GCM_SHA384. This run did not record
+key exchange again. The earlier socket tests recorded X25519MLKEM768, but that
+observation must not be substituted for a measurement of these Jetty sessions.
+
+Implication for OpenVox implementation
+The observed BCJSSE engine dependency blocker is resolved by the published TLS
+jar update. An OpenVox integration does not need a custom BC patch or the global
+multi-release workaround. It still needs supported packaging/classpath and
+provider/signature configuration, plus tests of the complete application paths.
+The library's unsupported JDK algorithm-policy-entry warnings are still present
+and require policy compatibility review before deployment.
+
+Evidence
+- evidence/results.txt: assertions for all 16 expected outcomes.
+- evidence/client.log: client success/error messages.
+- evidence/ML-DSA-44/jetty.log: runtime jar, Jetty startup, reload and revocation.
+- evidence/RSA/jetty.log: RSA control.
+- evidence/engine-probe.log: successful engine creation with normal jar loading.
+- evidence/crls.log: CRL generation and offline verification.
+- evidence/versions.txt: runtime versions and hashes of all four BC jars.
+
+Reproduce
+Build Dockerfile as openvox9-jetty-fixed:temporary, then run:
+docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges --memory 1g --cpus 2 --entrypoint /bin/sh openvox9-jetty-fixed:temporary /test/run.sh
+
+Limits
+This test used the actual packaged Jetty factory; it did not start the complete
+OpenVox service. It did not test outbound Java HTTPS, automatic CRL file watching,
+TLS session resumption or existing connections after revocation, malformed or
+expired CRLs, Vault, enrollment/catalog runs, renewal, FIPS or production migration.
+Provider defaults for ordinary installations must be preserved in upstream work.
+
+The container had no external network, host mounts or published ports. The test
+container and tagged image were removed after evidence collection. Production
+services and repository files were unchanged. The shareable evidence archive
+excludes private keys, DER key material, dependency jars and compiled classes.
+
+Upstream references
+https://github.com/bcgit/bc-java/issues/2448
+https://github.com/bcgit/bc-java/blob/1.86.X/docs/releasenotes.md

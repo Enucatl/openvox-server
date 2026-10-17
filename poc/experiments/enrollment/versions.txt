@@ -1,0 +1,9 @@
+openjdk-25-jre-headless:amd64	25.0.4.1+1-1~26.04.4
+openvox-agent	9.1.0-1+ubuntu26.04
+openvox-server	9.1.0-1+ubuntu26.04
+openjdk version "25.0.4.1" 2026-08-18
+OpenJDK Runtime Environment (build 25.0.4.1+1-1-26.04.4-Ubuntu)
+OpenJDK 64-Bit Server VM (build 25.0.4.1+1-1-26.04.4-Ubuntu, mixed mode, sharing)
+Vault v2.2.0 (2891bfd23893ebd302307050edaf03d871ea8351), built 2026-10-14T15:24:08Z
+144a9ff216e217861d7f1c18b4c8ba94f3ed003fd6e8e7f732403a443e5668ca  server.jar
+64884404557ee590b43a1842c9cd5a3777895213c34bc10eac05ceb550a4aae7  /usr/local/bin/vault

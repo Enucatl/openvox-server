@@ -1,0 +1,27 @@
+(require '[puppetlabs.ssl-utils.core :as ssl])
+(import '(java.security KeyPairGenerator)
+        '(java.util Arrays Date)
+        '(javax.security.auth.x500 X500Principal)
+        '(org.bouncycastle.asn1 DERPrintableString)
+        '(org.bouncycastle.asn1.x500 X500NameBuilder)
+        '(org.bouncycastle.asn1.x500.style BCStyle))
+
+(def issuer-name (-> (X500NameBuilder. BCStyle/INSTANCE)
+                     (.addRDN BCStyle/CN (DERPrintableString. "Printable CA"))
+                     .build))
+(def issuer (X500Principal. (.getEncoded issuer-name)))
+(doseq [algorithm ["RSA" "ML-DSA-44"]]
+  (let [generator (KeyPairGenerator/getInstance algorithm "BC")
+        _ (when (= algorithm "RSA") (.initialize generator 2048))
+        pair (.generateKeyPair generator)
+        certificate (ssl/sign-certificate issuer (.getPrivate pair) 123
+                                          (Date. (- (System/currentTimeMillis) 1000))
+                                          (Date. (+ (System/currentTimeMillis) 3600000))
+                                          (ssl/cn "Leaf") (.getPublic pair))]
+    (assert (Arrays/equals (.getEncoded issuer)
+                           (.getEncoded (.getIssuerX500Principal certificate)))
+            (str algorithm " issuer DER changed"))
+    (.verify certificate (.getPublic pair))
+    (when (= algorithm "ML-DSA-44")
+      (assert (= "2.16.840.1.101.3.4.3.17" (.getSigAlgOID certificate))))
+    (println algorithm "ARTIFACT_SIGNING_AND_ISSUER_DER_PASS")))

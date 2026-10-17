@@ -1,0 +1,12 @@
+version: 5
+hierarchy:
+  - name: Vault over ML-DSA
+    data_hash: vault_hiera_hash
+    uri: https://localhost:8202/v1/kv/data/puppet
+    options:
+      version: v2
+      auth_path: cert
+      auth_name: puppet-server
+      ca_trust: /test/vault-state/root.pem
+      timeout: 10
+      fail_hard: true

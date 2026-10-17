@@ -1,0 +1,4 @@
+openvox	https://github.com/OpenVoxProject/openvox.git	e4c91baedaf2ef28ad9b742986b01414b9606d77
+jvm-ssl-utils	https://github.com/OpenVoxProject/jvm-ssl-utils.git	fecd9e80a1755e07d61708168f27abebf69f9a70
+openvoxserver-ca	https://github.com/OpenVoxProject/openvoxserver-ca.git	4bf0c1e25a1e3f99268e26fab1c50caad5c7937a
+vault-hiera	https://github.com/enucatl/vault.git	1080ac7a84b5e9e3320d6abacd9613085410b176

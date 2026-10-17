@@ -1,0 +1,33 @@
+Vault v2.2.0 (2891bfd23893ebd302307050edaf03d871ea8351), built 2026-10-14T15:24:08Z
+Ruby 4.0.7; Ruby OpenSSL 4.0.2; OpenSSL 3.5.9 29 Sep 2026
+PASS Vault root CRL uses verified ML-DSA-44 signature
+PASS Vault signed external ML-DSA-44 subordinate CSR
+PASS Subordinate has critical CA:TRUE,pathlen:0
+PASS Subordinate permits certificate and CRL signing
+PASS ML-DSA-44 key and signature: /CN=Vault ML-DSA-44 Root
+PASS ML-DSA-44 key and signature: /CN=OpenVox ML-DSA-44 CA
+PASS ML-DSA-44 key and signature: /CN=localhost
+PASS ML-DSA-44 key and signature: /CN=agent.test
+TLS TLSv1.3 TLS_AES_128_GCM_SHA256; peer public-key OID 2.16.840.1.101.3.4.3.17 signature ML-DSA-44; HTTP 200
+PASS Vault certificate auth accepts authorized ML-DSA-44 agent
+TLS TLSv1.3 TLS_AES_128_GCM_SHA256; peer public-key OID 2.16.840.1.101.3.4.3.17 signature ML-DSA-44; HTTP 400
+PASS Vault certificate auth rejects same-name wrong issuer
+TLS TLSv1.3 TLS_AES_128_GCM_SHA256; peer public-key OID 2.16.840.1.101.3.4.3.17 signature ML-DSA-44; HTTP 400
+PASS Vault certificate auth rejects unauthorized name under correct issuer
+TLS TLSv1.3 TLS_AES_128_GCM_SHA256; peer public-key OID 2.16.840.1.101.3.4.3.17 signature ML-DSA-44; HTTP 400
+PASS Vault certificate auth rejects missing client certificate
+PASS Vault hierarchy and cert-auth PoC complete
+Key             Value
+---             -----
+Seal Type       shamir
+Initialized     true
+Sealed          false
+Total Shares    1
+Threshold       1
+Version         2.2.0
+Build Date      2026-10-14T15:24:08Z
+Storage Type    inmem
+Cluster Name    vault-cluster-b06ce62e
+Cluster ID      22ebc6ef-dc7b-b723-2449-d701c6efc8ed
+HA Enabled      false
+64884404557ee590b43a1842c9cd5a3777895213c34bc10eac05ceb550a4aae7  /usr/local/bin/vault

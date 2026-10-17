@@ -1,0 +1,292 @@
+# frozen_string_literal: true
+
+require 'puppet'
+require 'uri'
+require 'openssl'
+require 'json'
+require 'net/http'
+
+# Class provides methods to interface with Hashicorp Vault
+class VaultSession
+  def initialize(args)
+    # @summary Provide methods to interface with Hashicorp Vault
+    # @param [Hash] args Configuration options for the Vault connection.
+    # @option args [String] :uri Required The URL of a Vault API endpoint
+    # @option args [Integer] :timeout Optional Seconds to wait for connection attempts. (5)
+    # @option args [Boolean] :secure Optional When true, server certificates will be validated against the trusted CA store. (true)
+    # @option args [String] :ca_trust Optional path to a trusted CA bundle. Defaults to a supported system CA bundle.
+    # @option args [String] :token Optional token used to access the Vault API, otherwise attempts certificate authentication using the Puppet agent certificate.
+    # @option args [String] :auth_path The Vault path of the "cert" authentication type for Puppet certificates
+    # @option args [String] :auth_name The optional Vault certificate named role to authenticate against
+    # @option args [Boolean] :fail_hard Optional Raise an exception on errors when true, or return an empty hash when false. (true)
+    # @option args [String] :version The version of the Vault key/value secrets engine, either 'v1' or 'v2'. (v1)
+    raise Puppet::Error, "The #{self.class.name} class requires a 'uri'." unless args.key?('uri')
+    @uri = URI(args['uri'])
+    raise Puppet::Error, "Unable to parse a hostname from #{args['uri']}" unless uri.hostname
+    @fail_hard = if [true, false].include? args.dig('fail_hard')
+                   args.dig('fail_hard')
+                 else
+                   true
+                 end
+    timeout = if args.dig('timeout').is_a? Integer
+                args['timeout']
+              else
+                5
+              end
+    @version = if args.dig('version') == 'v2'
+                 'v2'
+               else
+                 'v1'
+               end
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.open_timeout = timeout
+    http.read_timeout = timeout
+    secure = true unless args.dig('secure') == false || @uri.scheme == 'http'
+    if secure
+      ca_trust = if args.dig('ca_trust').is_a? String
+                   args['ca_trust']
+                 else
+                   nil
+                 end
+      http.use_ssl = true
+      http.min_version = OpenSSL::SSL::TLS1_2_VERSION
+      ca_file = get_ca_file(ca_trust)
+      if defined?(Puppet::Server::HttpClient)
+        # JRuby OpenSSL cannot represent ML-DSA keys; use the server's Java TLS stack.
+        configure_java_http(ca_file, timeout, !!args['token'])
+      else
+        http.cert_store = get_cert_store(ca_file)
+      end
+      http.verify_mode = OpenSSL::SSL::VERIFY_PEER
+    elsif @uri.scheme == 'https'
+      http.use_ssl = true
+      http.verify_mode = OpenSSL::SSL::VERIFY_NONE
+    else
+      http.use_ssl = false
+      http.verify_mode = OpenSSL::SSL::VERIFY_NONE
+    end
+    @http = http
+    token = if args.dig('token')
+              args['token']
+            else
+              raise Puppet::Error, "An 'auth_path' must be defined when not using a token." unless args.key?('auth_path')
+              get_token(args['auth_path'], args['auth_name'])
+            end
+    @headers = {
+      'Content-Type': 'application/json',
+      'X-Vault-Token': token,
+    }
+  end
+
+  attr_accessor :uri, :http, :secure, :fail_hard
+
+  def err_check(response)
+    # @summary Consistent error handling for common failures
+    # @param response An instance of Net::HTTPResponse
+    # @return nil
+    if response.code.to_i == 404
+      err_message = "Vault path not found. (#{response.code} from #{@uri})"
+      Puppet.debug append_api_errors(err_message, response)
+      raise Puppet::Error, append_api_errors(err_message, response) if fail_hard
+    elsif response.code.to_i != 200
+      err_message = "Vault request failed. (#{response.code}) from #{@uri})"
+      Puppet.debug response.body
+      Puppet.debug append_api_errors(err_message, response)
+      raise Puppet::Error, append_api_errors(err_message, response) if fail_hard
+    end
+    nil
+  end
+
+  def append_api_errors(message, response)
+    # @summary Add meaningful(maybe?) messages to errors
+    # @param [String] :message The error string before appending any API errors.
+    # @param [Net::HTTPResponse] :response The method will try to read errors from the response and append to 'message'
+    # @return [String] The updated error message including any errors found in the response.
+    errors = begin
+               JSON.parse_json(response.body)['errors']
+             rescue
+               nil
+             end
+    message << " (api errors: #{errors})" if errors
+    message
+  end
+
+  def parse_response(response, version = @version)
+    # @summary Process an HTTP response as a JSON string and return Vault secrets
+    # @param [Net::HTTPResponse] :response The object body will be parsed as JSON.
+    # @param [String] :version The version of the Vault key/value secrets engine in the response, either 'v1' or 'v2' (v1)
+    # @return [Hash] The returned hash contains the secret key/value pairs.
+    begin
+      output = if version == 'v2'
+                 JSON.parse(response.body)['data']['data']
+               else
+                 JSON.parse(response.body)['data']
+               end
+    rescue
+      nil
+    end
+    err_message = "Failed to parse #{version} key/value data from response body: (#{@uri_path})"
+    Puppet.debug err_message if output.nil?
+    v1_warn = "Data from '#{@uri_path}' was requested as key/value v2, but may be v1 or empty."
+    Puppet.debug v1_warn if @version == 'v2' && output && output.empty?
+    v2_warn = "Data from '#{@uri_path}' appears to be key/value v2, but was requested as v1"
+    Puppet.debug v2_warn if @version == 'v1' && output && output.dig('data') && output.dig('metadata')
+    raise Puppet::Error, err_message if output.nil? && fail_hard
+    output ||= {}
+    output
+  end
+
+  def get(uri_path = @uri.path, version = @version)
+    # @summary Submit an HTTP GET request to the given 'uri_path'
+    # @param [String] :uri_path A relative path component of a URI, or reference URI.path
+    # @param [String] :version The version of the Vault key/value secrets engine (v1)
+    # @retrun [Hash] A hash containing the secret key/value pairs.
+    @uri_path = uri_path
+    request = Net::HTTP::Get.new(uri_path)
+    if @uri.user && @uri.password
+      Puppet.debug "Using basic authentication for #{@uri_path}"
+      request.basic_auth(@uri.user, @uri.password)
+    end
+    @headers.each do |key, value|
+      request[key] = value
+    end
+    response = request_response(request)
+    err_check(response)
+    parse_response(response, version)
+  end
+
+  def post(uri_path = @uri.path, data = {})
+    # @summary Submit an http post request to the given 'uri_path'
+    # @param [String] :uri_path A relative path component of a URI, or reference to a URI.path.
+    # @param [Hash] :data A hash of values to submit with the HTTP POST request.
+    # return [Net::HTTPResponse]
+    @uri_path = uri_path
+    request = Net::HTTP::Post.new(uri_path)
+    if @uri.user && @uri.password
+      # use HTTP basic authentication in uri_path with Net::HTTP::Post
+      Puppet.debug "Using basic authentication for #{@uri_path}"
+      request.basic_auth(@uri.user, @uri.password)
+    end
+    # This function may be called before instance variable is defined as part of initialize
+    @headers ||=  {}
+    @headers.each do |key, value|
+      request[key] = value
+    end
+    request.body = data.to_json
+    response = request_response(request)
+    err_check(response)
+    response
+  end
+
+  def get_token(auth_path, auth_name)
+    # @summary Use the Puppet host certificate and private key to authenticate to Vault
+    # @param [String] :auth_path The Vault path of the "cert" authentication type for Puppet
+    # @param [String] :auth_name The optional Vault named certificate role to authenticate against
+    # @return [String] A Vault token.
+
+    # Get the client certificate and private key files for Vault authenticaion
+    hostcert = File.expand_path(Puppet.settings[:hostcert])
+    hostprivkey = File.expand_path(Puppet.settings[:hostprivkey])
+    unless @java_options
+      http.cert = OpenSSL::X509::Certificate.new(File.read(hostcert))
+      http.key = OpenSSL::PKey.read(File.read(hostprivkey))
+    end
+
+    data = auth_name ? { name: auth_name } : nil
+
+    # Submit the request to the auth_path login endpoint
+    response = post("/v1/auth/#{auth_path.gsub(%r{/$}, '')}/login", data)
+    err_check(response)
+
+    # Extract the token value from the response
+    begin
+      token = JSON.parse(response.body)['auth']['client_token']
+    rescue
+      raise Puppet::Error, 'Unable to parse client_token from vault response.'
+    end
+    raise Puppet::Error, 'No client_token found.' if token.nil?
+    token
+  end
+
+  def get_ca_file(ca_trust)
+    # @summary Select an explicit trusted CA bundle or an existing supported system bundle.
+    # @param [String] ca_trust An explicit CA bundle path.
+    # @return [String] The selected CA bundle path.
+    if ca_trust
+      raise Puppet::Error, "Trusted CA certificate file does not exist: #{ca_trust}" unless File.file?(ca_trust)
+
+      return ca_trust
+    end
+
+    ca_file = [
+      '/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem',
+      '/etc/ssl/certs/ca-certificates.crt',
+    ].find { |path| File.file?(path) }
+    raise Puppet::Error, 'Failed to get the trusted CA certificate file.' unless ca_file
+
+    ca_file
+  end
+
+  def get_ca_certs(ca_bundle)
+    # @summary Load trusted CA certificates while tolerating bundle comments, duplicates, and malformed entries.
+    # @param [String] ca_bundle The selected CA bundle path.
+    # @return [Array<OpenSSL::X509::Certificate>] The valid certificates from the bundle.
+    raise Puppet::Error, "Trusted CA certificate file does not exist: #{ca_bundle}" unless File.file?(ca_bundle)
+
+    certs = File.read(ca_bundle).scan(%r{-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----}m).map do |pem|
+      OpenSSL::X509::Certificate.new(pem)
+    rescue OpenSSL::X509::CertificateError => e
+      Puppet.debug "Skipping malformed certificate in #{ca_bundle}: #{e.message}"
+      nil
+    end.compact
+
+    raise Puppet::Error, "No valid CA certificates found in: #{ca_bundle}" if certs.empty?
+
+    certs
+  end
+
+  def get_cert_store(ca_bundle)
+    store = OpenSSL::X509::Store.new
+    get_ca_certs(ca_bundle).each do |cert|
+      store.add_cert(cert)
+    rescue OpenSSL::X509::StoreError
+      # Duplicate certificates do not need to be added twice.
+    end
+    store
+  end
+
+  def configure_java_http(ca_file, timeout, token_auth)
+    ssl_utils = Java::com.puppetlabs.ssl_utils.SSLUtils
+    ca_reader = java.io.StringReader.new(get_ca_certs(ca_file).map(&:to_pem).join)
+    context = if token_auth
+                ssl_utils.ca_cert_pem_to_ssl_context(ca_reader)
+              else
+                ssl_utils.pems_to_ssl_context(
+                  java.io.StringReader.new(File.read(Puppet[:hostcert])),
+                  java.io.StringReader.new(File.read(Puppet[:hostprivkey])), ca_reader
+                )
+              end
+    @java_options = Java::ComPuppetlabsHttpClient::ClientOptions.new
+    @java_options.set_ssl_context(context)
+    @java_options.set_connect_timeout_milliseconds(timeout * 1000)
+    @java_options.set_socket_timeout_milliseconds(timeout * 1000)
+    @java_options.set_enable_url_metrics(false)
+    @java_options.set_follow_redirects(false)
+  end
+
+  def request_response(request)
+    return http.request(request) unless @java_options
+
+    options = Java::ComPuppetlabsHttpClient::RequestOptions.new("#{@uri.scheme}://#{@uri.host}:#{@uri.port}#{request.path}")
+    options.set_headers(request.each_header.to_h)
+    options.set_as(Java::ComPuppetlabsHttpClient::ResponseBodyType::TEXT)
+    options.set_body(request.body) if request.body
+    client = Java::ComPuppetlabsHttpClient::Sync.create_client(@java_options)
+    begin
+      response = request.method == 'GET' ? client.get(options) : client.post(options)
+      Puppet::Server::HttpResponse.new(response, @uri)
+    ensure
+      client.close
+    end
+  end
+end

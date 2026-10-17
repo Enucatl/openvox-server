@@ -1,0 +1,26 @@
+[
+  {
+    "hostname": "localhost",
+    "port": 8140,
+    "protocol": "TLSv1.3",
+    "cipher": "TLS_AES_128_GCM_SHA256",
+    "group": "x25519",
+    "client_signature": "rsa_pss_rsae_sha256",
+    "server_signature": "rsa_pss_rsae_sha256",
+    "resumed": false,
+    "client_certificate": "/CN=client",
+    "server_certificate": "/CN=server"
+  },
+  {
+    "hostname": "localhost",
+    "port": 8140,
+    "protocol": "TLSv1.3",
+    "cipher": "TLS_AES_128_GCM_SHA256",
+    "group": "x25519",
+    "client_signature": "rsa_pss_rsae_sha256",
+    "server_signature": "rsa_pss_rsae_sha256",
+    "resumed": false,
+    "client_certificate": "/CN=client",
+    "server_certificate": "/CN=server"
+  }
+]
