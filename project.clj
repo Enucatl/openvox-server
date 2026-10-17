@@ -63,6 +63,7 @@
                          [net.logstash.logback/logstash-logback-encoder "8.1"]
                          [org.apache.commons/commons-exec "1.6.0"]
                          [org.bouncycastle/bcpkix-jdk18on "1.86"]
+                         [org.bouncycastle/bctls-jdk18on "1.86.2"]
                          [org.bouncycastle/bcpkix-fips "2.1.13"]
                          [org.bouncycastle/bc-fips "2.1.3"]
                          [org.bouncycastle/bctls-fips "2.1.25"]
@@ -77,7 +78,7 @@
                          [org.openvoxproject/rbac-client "1.3.0"]
                          [org.openvoxproject/rbac-client "1.3.0" :classifier "test"]
                          [org.openvoxproject/ring-middleware "2.2.1"]
-                         [org.openvoxproject/ssl-utils "3.7.1"]
+                         [org.openvoxproject/ssl-utils "3.7.2-SNAPSHOT"]
                          [org.openvoxproject/trapperkeeper "5.0.6"]
                          [org.openvoxproject/trapperkeeper "5.0.6" :classifier "test"]
                          [org.openvoxproject/trapperkeeper-comidi-metrics "1.1.1"]
@@ -194,7 +195,8 @@
                                         [beckon]
                                         [lambdaisland/uri]
                                         [org.openvoxproject/rbac-client :classifier "test" :scope "test"]]}
-             :dev-deps {:dependencies [[org.bouncycastle/bcpkix-jdk18on]]}
+             :dev-deps {:dependencies [[org.bouncycastle/bcpkix-jdk18on]
+                                       [org.bouncycastle/bctls-jdk18on]]}
              :dev [:defaults :dev-deps]
              :fips-deps {:dependencies [[org.bouncycastle/bcpkix-fips]
                                         [org.bouncycastle/bc-fips]
@@ -251,6 +253,7 @@
                                                ;; specified in both places. TODO: fix this.
                                                [org.clojure/clojure]
                                                [org.bouncycastle/bcpkix-jdk18on]
+                                               [org.bouncycastle/bctls-jdk18on]
                                                [org.openvoxproject/jruby-utils]
                                                ;; Do not modify this line. It is managed by the release process
                                                ;; via the scripts/sync_ezbake_dep.rb script.
@@ -273,7 +276,9 @@
                             :uberjar-exclusions [#"^org/bouncycastle/.*"]
                             :plugins [[org.openvoxproject/lein-ezbake ~(or (System/getenv "EZBAKE_VERSION") "4.2.1")]]
                       :name "puppetserver"}
-             :uberjar {:dependencies [[org.openvoxproject/trapperkeeper-webserver]]
+             :uberjar {:dependencies [[org.openvoxproject/trapperkeeper-webserver]
+                                       [org.bouncycastle/bcpkix-jdk18on]
+                                       [org.bouncycastle/bctls-jdk18on]]
                        :aot [puppetlabs.trapperkeeper.main
                              puppetlabs.trapperkeeper.services.status.status-service
                              puppetlabs.trapperkeeper.services.metrics.metrics-service

@@ -50,6 +50,33 @@ a few things differently in OpenVox Server. See
 [External SSL Termination](https://docs.openvoxproject.org/openvox-server/latest/external_ssl_termination.html)
 for details.
 
+### ML-DSA-44 support
+
+ML-DSA-44 is opt-in. RSA remains the default. The tested runtime uses Java 25,
+Bouncy Castle TLS 1.86.2, and native agents with OpenSSL 3.5 and Ruby OpenSSL 4.
+Build this draft against the matching `ssl-utils` 3.7.2-SNAPSHOT changes.
+
+Use an imported ML-DSA-44 CA and prepare the server's ML-DSA-44 private and
+public key files before `puppetserver ca import`. The matching CA CLI changes
+support this import; automatic server and CA key generation still uses RSA.
+Configure agents with `key_type = mldsa44` using the matching OpenVox changes.
+
+Before server startup, add these JVM properties to `JAVA_ARGS`. Copy
+`resources/ext/java.security.mldsa` to a readable absolute path and use that
+path below. A single equals sign supplements the JDK security properties.
+
+```text
+-Djava.security.properties=/absolute/path/java.security.mldsa
+-Djdk.tls.client.SignatureSchemes=mldsa44,rsa_pss_rsae_sha256,rsa_pss_pss_sha256,ecdsa_secp256r1_sha256,ed25519,rsa_pkcs1_sha256
+-Djdk.tls.server.SignatureSchemes=mldsa44,rsa_pss_rsae_sha256,rsa_pss_pss_sha256,ecdsa_secp256r1_sha256,ed25519,rsa_pkcs1_sha256
+-Dorg.bouncycastle.jsse.client.SignatureSchemesCert=mldsa44,rsa_pss_rsae_sha256,rsa_pss_pss_sha256,ecdsa_secp256r1_sha256,ed25519,rsa_pkcs1_sha256
+-Dorg.bouncycastle.jsse.server.SignatureSchemesCert=mldsa44,rsa_pss_rsae_sha256,rsa_pss_pss_sha256,ecdsa_secp256r1_sha256,ed25519,rsa_pkcs1_sha256
+```
+
+This selects ordinary BC/BCJSSE providers. It does not establish FIPS runtime
+compatibility. TLS authentication signatures and negotiated key exchange are
+separate properties; an ML-DSA certificate alone does not prove either result.
+
 ## Command-line utilities
 
 OpenVox Server provides several command-line utilities for development and

@@ -25,6 +25,7 @@
            (java.time.temporal ChronoUnit)
            (java.util Date Locale)
            (java.util.concurrent.locks ReentrantReadWriteLock)
+           (javax.security.auth.x500 X500Principal)
            (org.apache.commons.io IOUtils)
            (org.bouncycastle.pkcs PKCS10CertificationRequest)))
 
@@ -1194,6 +1195,13 @@
     (log/debug (i18n/trs "No CSR Attributes configuration file found at {0}, CSR Attributes will not be loaded"
                 csr-attributes-file))))
 
+(defn- leaf-key-usage
+  [^PublicKey public-key]
+  (utils/key-usage
+    (if (#{"ML-DSA" "ML-DSA-44"} (.getAlgorithm public-key))
+      #{:digital-signature}
+      #{:key-encipherment :digital-signature}) true))
+
 (schema/defn create-master-extensions :- (schema/pred utils/extension-list?)
   "Create a list of extensions to be added to the master certificate."
   [master-certname :- schema/Str
@@ -1208,9 +1216,7 @@
                        (utils/basic-constraints-for-non-ca true)
                        (utils/ext-key-usages
                          [ssl-server-cert ssl-client-cert] true)
-                       (utils/key-usage
-                         #{:key-encipherment
-                           :digital-signature} true)
+                       (leaf-key-usage master-public-key)
                        (utils/subject-key-identifier
                          master-public-key false)
                        {:oid cli-auth-oid
@@ -1285,8 +1291,7 @@
                                                  settings)
         x500-name      (utils/cn certname)
         validity       (cert-validity-dates (:ca-ttl ca-settings))
-        hostcert       (utils/sign-certificate (utils/get-subject-from-x509-certificate
-                                                ca-cert)
+        hostcert       (utils/sign-certificate (.getSubjectX500Principal ca-cert)
                                                ca-private-key
                                                next-serial
                                                (:not-before validity)
@@ -1585,9 +1590,7 @@
                        (utils/basic-constraints-for-non-ca true)
                        (utils/ext-key-usages
                          [ssl-server-cert ssl-client-cert] true)
-                       (utils/key-usage
-                         #{:key-encipherment
-                           :digital-signature} true)
+                       (leaf-key-usage subj-pub-key)
                        (utils/subject-key-identifier
                         subj-pub-key false)]
         subject (get-csr-subject csr)
@@ -1679,8 +1682,7 @@
         validity    (cert-validity-dates renewal-ttl)
         ;; if part of a CA bundle, the intermediate CA will be first in the chain
         cacert      (utils/pem->ca-cert cacert cakey)
-        signed-cert (utils/sign-certificate (utils/get-subject-from-x509-certificate
-                                             cacert)
+        signed-cert (utils/sign-certificate (.getSubjectX500Principal cacert)
                                             (utils/pem->private-key cakey)
                                             (next-serial-number! ca-settings)
                                             (:not-before validity)
@@ -2357,7 +2359,7 @@
         cert-subject (utils/get-subject-from-x509-certificate certificate)
         cert-name (utils/x500-name->CN cert-subject)
         signed-cert (utils/sign-certificate
-                      (utils/get-subject-from-x509-certificate cacert)
+                      (.getSubjectX500Principal cacert)
                       (utils/pem->private-key cakey)
                       (next-serial-number! ca-settings)
                       (:not-before validity)
@@ -2447,7 +2449,7 @@
   [subject :- schema/Str
    csr-path :- schema/Str
    cacert :- Certificate
-   casubject  :- schema/Str
+   casubject  :- (schema/cond-pre schema/Str X500Principal)
    ca-private-key :- PrivateKey
    {:keys [signeddir ca-ttl allow-auto-renewal allow-subject-alt-names
            allow-authorization-extensions auto-renewal-cert-ttl] :as ca-settings} :- CaSettings]
@@ -2493,7 +2495,7 @@
    report-activity]
   (let [;; if part of a CA bundle, the intermediate CA will be first in the chain
         cacert (utils/pem->ca-cert cacert cakey)
-        casubject (utils/get-subject-from-x509-certificate cacert)
+        casubject (.getSubjectX500Principal cacert)
         ca-private-key (utils/pem->private-key cakey)]
 
     ;; since we are going to be manipulating the serial file and the inventory file for multiple entries,
