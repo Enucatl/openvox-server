@@ -174,6 +174,8 @@
                        :bootstrap-source :services-d
                        :logrotate-enabled false
                        :replaces-pkgs [{:package "puppetserver" :version ""}]}
+                :project-files [{:file "resources/ext/java.security.mldsa"
+                                 :install {:path "/opt/puppetlabs/server/data/puppetserver"}}]
                 :resources {:dir "tmp/ezbake-resources"}
                 :config-dir "ezbake/config"
                 :system-config-dir "ezbake/system-config"}

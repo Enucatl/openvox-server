@@ -64,4 +64,10 @@ cat "${DIR}/mri-gem-list-no-dependencies.txt"
 
 echo "jruby-puppet: { gem-home: ${DESTDIR}/opt/puppetlabs/puppet/lib/ruby/vendor_gems }" > jruby.conf
 
-install_gems "${DIR}/mri-gem-list-no-dependencies.txt" "--ignore-dependencies"
+if [[ -f "${DIR}/openvoxserver-ca.gem" ]]; then
+  # A coordinated build stages the tested fork instead of resolving its public version.
+  gem_install_jars=(ext/classpath-jars/{bcpkix,bcprov}-jdk18on-*.jar)
+  java -cp "$(IFS=:; echo "${gem_install_jars[*]}"):puppet-server-release.jar" clojure.main -m puppetlabs.puppetserver.cli.gem --config jruby.conf -- install --local --ignore-dependencies --no-document "${DIR}/openvoxserver-ca.gem"
+else
+  install_gems "${DIR}/mri-gem-list-no-dependencies.txt" "--ignore-dependencies"
+fi
