@@ -15,4 +15,13 @@ jobs:
       - name: Request a coordinated build
         env:
           GH_TOKEN: ${{ secrets.PACKAGES_DISPATCH_TOKEN }}
-        run: gh workflow run packages.yml --repo Enucatl/openvox-packages --ref main
+        run: |
+          if [[ "$GH_TOKEN" != github_pat_* ]]; then
+            echo '::error::PACKAGES_DISPATCH_TOKEN does not have the fine-grained PAT prefix. Re-enter it using the gh secret set interactive prompt.'
+            exit 1
+          fi
+          if [[ "$GH_TOKEN" =~ [[:space:]] ]]; then
+            echo '::error::PACKAGES_DISPATCH_TOKEN contains whitespace. Re-enter the complete token without spaces or newlines.'
+            exit 1
+          fi
+          gh workflow run packages.yml --repo Enucatl/openvox-packages --ref main
