@@ -56,9 +56,11 @@ ML-DSA-44 is opt-in. RSA remains the default. The tested runtime uses Java 25,
 Bouncy Castle TLS 1.86.2, and native agents with OpenSSL 3.5 and Ruby OpenSSL 4.
 Build this draft against the matching `ssl-utils` 3.7.2-SNAPSHOT changes.
 
-Use an imported ML-DSA-44 CA and prepare the server's ML-DSA-44 private and
-public key files before `puppetserver ca import`. The matching CA CLI changes
-support this import; automatic server and CA key generation still uses RSA.
+With the matching CA CLI, run `puppetserver ca setup --key-type mldsa44` to
+create an ML-DSA-44 root, intermediate CA, and server identity. Setup defaults
+to RSA when the flag is omitted. Alternatively, import an ML-DSA-44 CA after
+preparing the server's ML-DSA-44 private and public key files. Automatic server
+startup generation remains RSA; setup does not configure the TLS provider.
 Configure agents with `key_type = mldsa44` using the matching OpenVox changes.
 
 Before server startup, add these JVM properties to `JAVA_ARGS`. Copy
