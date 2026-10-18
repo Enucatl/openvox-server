@@ -147,13 +147,12 @@
             :versioned-code
             {:code-id-command (script-path "warn_echo_and_error")
              :code-content-command (script-path "echo")}}
-       (logging/with-test-logging
-        (let [catalog-response (http-client/get
+       (let [catalog-response (http-client/get
                                 "https://localhost:8140/puppet/v3/catalog/localhost?environment=production"
                                 testutils/catalog-request-options)]
           (is (= 500 (:status catalog-response)))
           (is (re-find #"Non-zero exit code returned while running" (:body catalog-response)))
-          (is (logged? #"Executed an external process which logged to STDERR: production" :warn)))))))
+          (is (logged? #"Executed an external process which logged to STDERR: production" :warn))))))
 
 (deftest ^:integration code-id-request-test-no-environment
   (testing "code id is not added and 400 is returned if environment is not included in request"
