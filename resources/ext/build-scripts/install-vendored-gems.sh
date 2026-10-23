@@ -13,6 +13,7 @@ install_gems () {
     # Skip lines with comments.
     [[ $LINE == "#"* ]] && continue
     gem_name=$(echo $LINE |awk '{print $1}')
+    [[ $gem_name == jruby-openssl && -f "${DIR}/jruby-openssl.gem" ]] && continue
     gem_version=$(echo $LINE |awk '{print $2}')
     gem_list+=("$gem_name:$gem_version")
   done < $gem_file
@@ -48,6 +49,12 @@ cat "${DIR}/jruby-stdlib-gem-list.txt"
 echo "jruby-puppet: { gem-home: ${DESTDIR}/opt/puppetlabs/server/data/puppetserver/vendored-jruby-gems }" > jruby.conf
 
 install_gems "${DIR}/jruby-stdlib-gem-list.txt"
+
+if [[ -f "${DIR}/jruby-openssl.gem" ]]; then
+  # A coordinated build supplies the tested OpenSSL fork.
+  gem_install_jars=(ext/classpath-jars/{bcpkix,bcprov}-jdk18on-*.jar)
+  java -cp "$(IFS=:; echo "${gem_install_jars[*]}"):puppet-server-release.jar" clojure.main -m puppetlabs.puppetserver.cli.gem --config jruby.conf -- install --local --ignore-dependencies --no-document "${DIR}/jruby-openssl.gem"
+fi
 
 # We need to ignore dependencies to prevent puppetserver-ca from being installed
 # with facter2 (from gem dependency resolution) and facter3 (from puppet-agent packages)
